@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  public-site:
+    build:
+      context: ./apps/public-site
+    container_name: revgin-public-site
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/public-site:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+
+  saas-dashboard:
+    build:
+      context: ./apps/saas-dashboard
+    container_name: revgin-saas-dashboard
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./apps/saas-dashboard:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+
+  backend-api:
+    build:
+      context: ./services/api
+    container_name: revgin-backend-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - db
+
+  db:
+    image: postgres:14
+    container_name: revgin-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: revgin
+      POSTGRES_PASSWORD: revginpass
+      POSTGRES_DB: revgin_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

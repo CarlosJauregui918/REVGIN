@@ -1,0 +1,21 @@
+# Node
+node_modules/
+.next/
+dist/
+
+# Python
+__pycache__/
+venv/
+.env
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# OS
+.DS_Store
+
+# Environment
+.env
+
+
