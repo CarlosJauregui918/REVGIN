@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+    environment:
+      - POSTGRES_USER=revgin
+      - POSTGRES_PASSWORD=revgin_local
+      - POSTGRES_DB=revgin
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - ENVIRONMENT=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - db
+    networks:
+      - revgin-network
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=revgin
+      - POSTGRES_PASSWORD=revgin_local
+      - POSTGRES_DB=revgin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - revgin-network
+
+volumes:
+  postgres_data:
+
+networks:
+  revgin-network:
+    driver: bridge 

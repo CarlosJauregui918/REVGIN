@@ -1,39 +1,42 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import openai
-import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import os
 
+from .routes import company, ai
+
+# Load environment variables
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Initialize FastAPI app
+app = FastAPI(
+    title="RevGin API",
+    description="API for RevGin - AI-Powered Revenue Engine Platform",
+    version="1.0.0"
+)
 
-app = FastAPI()
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class RoadmapRequest(BaseModel):
-    company_name: str
-    target_audience: str
-    brand_voice: str
-    goals: str
+# Include routers
+app.include_router(company.router, tags=["Companies"])
+app.include_router(ai.router, tags=["AI Features"])
 
-@app.post("/generate-roadmap")
-async def generate_roadmap(data: RoadmapRequest):
-    try:
-        prompt = (
-            f"Create a sales and marketing roadmap for {data.company_name}. "
-            f"The target audience is {data.target_audience}. "
-            f"The brand voice is {data.brand_voice}. "
-            f"The company’s main goals are: {data.goals}. "
-            f"Include top-of-funnel, middle-of-funnel, and bottom-of-funnel strategies."
-        )
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "development")
+    }
 
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=600
-        )
-
-        return {"roadmap": response.choices[0].message["content"]}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
