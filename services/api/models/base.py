@@ -1,8 +1,6 @@
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, DateTime, Integer
 from datetime import datetime
-
-Base = declarative_base()
+from ..core.database import Base
 
 class BaseModel(Base):
     """Base model class that includes common fields"""

@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import openai
 
-from ..core.database import get_db
-from ..models.company import Company, Analytics, Task
+from api.core.database import get_db
+from api.models.company import Company, Analytics, Task
 from pydantic import BaseModel
+from api.schemas.ai import AIResponse
+from api.core.auth import get_current_active_user
+from api.models.user import User
 
 router = APIRouter()
 
@@ -72,6 +75,45 @@ def get_company_data(company_id: int, db: Session) -> Dict[str, Any]:
             for t in active_tasks
         ]
     }
+
+@router.post("/analyze", response_model=AIResponse)
+def analyze_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Generate AI analysis for a company.
+    """
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Format the analysis string with proper null handling
+    analysis = f"""
+    Analysis for {company.name}:
+    Industry: {company.industry or 'Not specified'}
+    Monthly Revenue: ${company.monthly_revenue or 0.00:,.2f}
+    Conversion Rate: {company.conversion_rate or 0:.1f}%
+    Customer Satisfaction: {company.customer_satisfaction or 'N/A'}/5.0
+    
+    Key Metrics:
+    - Total Leads: {company.total_leads or 0}
+    - Employee Count: {company.employee_count or 'Not specified'}
+    - Founded Year: {company.founded_year or 'Not specified'}
+    - Market Share: {company.market_share or 'Not specified'}%
+    
+    Contact Information:
+    - Email: {company.contact_email or 'Not specified'}
+    - Phone: {company.contact_phone or 'Not specified'}
+    - Address: {company.address or 'Not specified'}
+    
+    Additional Information:
+    - Website: {company.website or 'Not specified'}
+    - Description: {company.description or 'Not specified'}
+    """
+    
+    return {"analysis": analysis}
 
 @router.post("/ai/insights")
 async def generate_insights(

@@ -1,81 +1,157 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime, timedelta
 
-from ..core.database import get_db
-from ..models.company import Company, RevenueEngine, Contact, Task, Analytics
-from ..schemas.company import (
+from api.core.database import get_db
+from api.models.company import Company, RevenueEngine, Contact, Task, Analytics
+from api.schemas.company import (
     CompanyCreate, CompanyUpdate, CompanyInDB,
     RevenueEngineCreate, RevenueEngineInDB,
     ContactCreate, ContactInDB,
     TaskCreate, TaskInDB,
     AnalyticsCreate, AnalyticsInDB
 )
+from pydantic import BaseModel
 
 router = APIRouter()
 
-@router.post("/companies/", response_model=CompanyInDB)
-def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
-    db_company = Company(**company.model_dump())
+# Pydantic models for request/response
+class CompanyBase(BaseModel):
+    name: str
+    industry: str
+    website: Optional[str] = None
+    description: Optional[str] = None
+    monthly_revenue: Optional[float] = None
+    total_leads: Optional[int] = None
+    conversion_rate: Optional[float] = None
+    customer_satisfaction: Optional[float] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+    employee_count: Optional[int] = None
+    founded_year: Optional[int] = None
+    market_share: Optional[float] = None
+
+class CompanyResponse(CompanyBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Company endpoints
+@router.post("/", response_model=CompanyResponse)
+def create_company(
+    company: CompanyCreate,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Create a new company.
+    """
+    db_company = Company(**company.dict())
     db.add(db_company)
     db.commit()
     db.refresh(db_company)
     return db_company
 
-@router.get("/companies/", response_model=List[CompanyInDB])
-def list_companies(
+@router.get("/", response_model=List[CompanyResponse])
+def read_companies(
     skip: int = 0,
     limit: int = 100,
-    search: Optional[str] = None,
-    industry: Optional[str] = None,
     db: Session = Depends(get_db)
-):
-    query = db.query(Company)
-    
-    if search:
-        query = query.filter(Company.name.ilike(f"%{search}%"))
-    if industry:
-        query = query.filter(Company.industry == industry)
-    
-    return query.offset(skip).limit(limit).all()
+) -> Any:
+    """
+    Retrieve all companies.
+    """
+    companies = db.query(Company).offset(skip).limit(limit).all()
+    return companies
 
-@router.get("/companies/{company_id}", response_model=CompanyInDB)
-def get_company(company_id: int, db: Session = Depends(get_db)):
+@router.get("/{company_id}", response_model=CompanyResponse)
+def read_company(
+    company_id: int,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Get company by ID.
+    """
     company = db.query(Company).filter(Company.id == company_id).first()
-    if not company:
+    if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
 
-@router.put("/companies/{company_id}", response_model=CompanyInDB)
+@router.put("/{company_id}", response_model=CompanyResponse)
 def update_company(
     company_id: int,
-    company_update: CompanyUpdate,
+    company: CompanyUpdate,
     db: Session = Depends(get_db)
-):
+) -> Any:
+    """
+    Update a company.
+    """
     db_company = db.query(Company).filter(Company.id == company_id).first()
-    if not db_company:
+    if db_company is None:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    for field, value in company_update.model_dump(exclude_unset=True).items():
+    for field, value in company.dict(exclude_unset=True).items():
         setattr(db_company, field, value)
     
     db.commit()
     db.refresh(db_company)
     return db_company
 
-@router.delete("/companies/{company_id}")
-def delete_company(company_id: int, db: Session = Depends(get_db)):
-    company = db.query(Company).filter(Company.id == company_id).first()
-    if not company:
+@router.delete("/{company_id}")
+def delete_company(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a company.
+    """
+    db_company = db.query(Company).filter(Company.id == company_id).first()
+    if db_company is None:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    db.delete(company)
+    db.delete(db_company)
     db.commit()
     return {"message": "Company deleted successfully"}
 
+@router.put("/{company_id}/publish")
+def publish_company(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Publish a company's page.
+    """
+    db_company = db.query(Company).filter(Company.id == company_id).first()
+    if db_company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    db_company.is_active = True
+    db.commit()
+    return {"message": "Company published successfully"}
+
+@router.put("/{company_id}/unpublish")
+def unpublish_company(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Unpublish a company's page.
+    """
+    db_company = db.query(Company).filter(Company.id == company_id).first()
+    if db_company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    db_company.is_active = False
+    db.commit()
+    return {"message": "Company unpublished successfully"}
+
 # Revenue Engine endpoints
-@router.post("/companies/{company_id}/revenue-engines/", response_model=RevenueEngineInDB)
+@router.post("/{company_id}/revenue-engines/", response_model=RevenueEngineInDB)
 def create_revenue_engine(
     company_id: int,
     revenue_engine: RevenueEngineCreate,
@@ -91,33 +167,43 @@ def create_revenue_engine(
     db.refresh(db_revenue_engine)
     return db_revenue_engine
 
-@router.get("/companies/{company_id}/revenue-engines/", response_model=List[RevenueEngineInDB])
-def list_revenue_engines(company_id: int, db: Session = Depends(get_db)):
+@router.get("/{company_id}/revenue-engines/", response_model=List[RevenueEngineInDB])
+def list_revenue_engines(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
     return db.query(RevenueEngine).filter(RevenueEngine.company_id == company_id).all()
 
 # Analytics endpoints
-@router.post("/companies/{company_id}/analytics/", response_model=AnalyticsInDB)
+@router.post("/{company_id}/analytics/")
 def create_analytics(
     company_id: int,
-    analytics: AnalyticsCreate,
+    metric_name: str,
+    metric_value: float,
+    category: str,
     db: Session = Depends(get_db)
 ):
     company = db.query(Company).filter(Company.id == company_id).first()
-    if not company:
+    if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    db_analytics = Analytics(**analytics.model_dump(), timestamp=datetime.utcnow())
+    db_analytics = Analytics(
+        company_id=company_id,
+        metric_name=metric_name,
+        metric_value=metric_value,
+        category=category
+    )
     db.add(db_analytics)
     db.commit()
     db.refresh(db_analytics)
     return db_analytics
 
-@router.get("/companies/{company_id}/analytics/", response_model=List[AnalyticsInDB])
+@router.get("/{company_id}/analytics/")
 def get_company_analytics(
     company_id: int,
     category: Optional[str] = None,
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Analytics).filter(Analytics.company_id == company_id)
@@ -129,10 +215,13 @@ def get_company_analytics(
     if end_date:
         query = query.filter(Analytics.timestamp <= end_date)
     
-    return query.order_by(Analytics.timestamp.desc()).all()
+    return query.all()
 
-@router.get("/companies/{company_id}/analytics/summary")
-def get_analytics_summary(company_id: int, db: Session = Depends(get_db)):
+@router.get("/{company_id}/analytics/summary")
+def get_analytics_summary(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -158,7 +247,7 @@ def get_analytics_summary(company_id: int, db: Session = Depends(get_db)):
     }
 
 # Task endpoints
-@router.post("/companies/{company_id}/tasks/", response_model=TaskInDB)
+@router.post("/{company_id}/tasks/", response_model=TaskInDB)
 def create_task(
     company_id: int,
     task: TaskCreate,
@@ -174,7 +263,7 @@ def create_task(
     db.refresh(db_task)
     return db_task
 
-@router.get("/companies/{company_id}/tasks/", response_model=List[TaskInDB])
+@router.get("/{company_id}/tasks/", response_model=List[TaskInDB])
 def list_tasks(
     company_id: int,
     status: Optional[str] = None,
@@ -194,7 +283,7 @@ def list_tasks(
     return query.order_by(Task.due_date.asc()).all()
 
 # Contact endpoints
-@router.post("/companies/{company_id}/contacts/", response_model=ContactInDB)
+@router.post("/{company_id}/contacts/", response_model=ContactInDB)
 def create_contact(
     company_id: int,
     contact: ContactCreate,
@@ -210,7 +299,7 @@ def create_contact(
     db.refresh(db_contact)
     return db_contact
 
-@router.get("/companies/{company_id}/contacts/", response_model=List[ContactInDB])
+@router.get("/{company_id}/contacts/", response_model=List[ContactInDB])
 def list_contacts(
     company_id: int,
     status: Optional[str] = None,
